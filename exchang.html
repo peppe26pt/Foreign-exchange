@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แอปแลกเปลี่ยนเงินตรา</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for Thai font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* Custom styles for select dropdown arrow */
+        select {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+        .loader {
+            width: 48px;
+            height: 48px;
+            border: 5px solid #FFF;
+            border-bottom-color: #4f46e5;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div id="app-container" class="w-full max-w-md mx-auto bg-white rounded-2xl shadow-xl p-6 md:p-8 space-y-6">
+        
+        <!-- Header -->
+        <div class="text-center">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800">เครื่องคำนวณอัตราแลกเปลี่ยน</h1>
+            <p class="text-gray-500 mt-1">อัตราแลกเปลี่ยนเรียลไทม์</p>
+        </div>
+
+        <!-- Amount Input -->
+        <div>
+            <label for="amount" class="block text-sm font-medium text-gray-700 mb-1">จำนวนเงิน</label>
+            <input type="number" id="amount" value="100" class="w-full p-3 border border-gray-300 rounded-lg text-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+        </div>
+
+        <!-- Currency Converters -->
+        <div class="relative">
+             <!-- From Currency -->
+            <div class="w-full mb-4">
+                <label for="from-currency" class="block text-sm font-medium text-gray-700 mb-1">จากสกุลเงิน</label>
+                <select id="from-currency" class="w-full p-3 border border-gray-300 rounded-lg text-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"></select>
+            </div>
+
+            <!-- Swap Button - Centered between the two selects -->
+            <button id="swap-button" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 p-3 bg-indigo-600 hover:bg-indigo-700 rounded-full shadow-lg transition-all duration-300 ease-in-out transform rotate-90 hover:rotate-180 active:scale-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M7 16L3 12m0 0l4-4m-4 4h18m-4 4l4-4m0 0l-4-4m4 4H3" />
+                </svg>
+            </button>
+
+             <!-- To Currency -->
+            <div class="w-full mt-4">
+                <label for="to-currency" class="block text-sm font-medium text-gray-700 mb-1">เป็นสกุลเงิน</label>
+                <select id="to-currency" class="w-full p-3 border border-gray-300 rounded-lg text-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"></select>
+            </div>
+        </div>
+
+        <!-- Result Display -->
+        <div id="result-container" class="text-center pt-2">
+             <div id="loader" class="loader mx-auto hidden"></div>
+            <p id="rate-info" class="text-gray-600 h-6"></p>
+            <p id="result" class="text-3xl md:text-4xl font-bold text-indigo-600 h-12 flex items-center justify-center"></p>
+            <p id="last-updated" class="text-xs text-gray-400 mt-2 h-4"></p>
+        </div>
+
+    </div>
+
+    <script>
+        // DOM Elements
+        const amountInput = document.getElementById('amount');
+        const fromCurrencySelect = document.getElementById('from-currency');
+        const toCurrencySelect = document.getElementById('to-currency');
+        const swapButton = document.getElementById('swap-button');
+        const resultDiv = document.getElementById('result');
+        const rateInfoDiv = document.getElementById('rate-info');
+        const lastUpdatedDiv = document.getElementById('last-updated');
+        const loader = document.getElementById('loader');
+
+        // API URL for exchange rates
+        const API_URL = 'https://open.er-api.com/v6/latest/';
+
+        // Thai names for currencies
+        const currencyNamesTH = {
+            "USD": "ดอลลาร์สหรัฐ", "EUR": "ยูโร", "JPY": "เยนญี่ปุ่น", "GBP": "ปอนด์สเตอร์ลิง",
+            "AUD": "ดอลลาร์ออสเตรเลีย", "CAD": "ดอลลาร์แคนาดา", "CHF": "ฟรังก์สวิส", "CNY": "หยวนจีน",
+            "HKD": "ดอลลาร์ฮ่องกง", "NZD": "ดอลลาร์นิวซีแลนด์", "SEK": "โครนาสวีเดน", "KRW": "วอนเกาหลีใต้",
+            "SGD": "ดอลลาร์สิงคโปร์", "NOK": "โครนนอร์เวย์", "MXN": "เปโซเม็กซิโก", "INR": "รูปีอินเดีย",
+            "RUB": "รูเบิลรัสเซีย", "ZAR": "แรนด์แอฟริกาใต้", "TRY": "ลีราตุรกี", "BRL": "เรียลบราซิล",
+            "THB": "บาทไทย", "MYR": "ริงกิตมาเลเซีย", "IDR": "รูเปียห์อินโดนีเซีย", "PHP": "เปโซฟิลิปปินส์",
+            "VND": "ดงเวียดนาม", "TWD": "ดอลลาร์ไต้หวันใหม่"
+        };
+        
+        // --- Functions ---
+
+        /**
+         * Fetches currency data from the API and populates the dropdowns.
+         */
+        async function loadCurrencies() {
+            try {
+                const response = await fetch(`${API_URL}USD`);
+                if (!response.ok) throw new Error('ไม่สามารถโหลดข้อมูลสกุลเงินได้');
+                const data = await response.json();
+                const currencies = Object.keys(data.rates);
+
+                // Populate dropdowns
+                populateCurrencyDropdown(fromCurrencySelect, currencies);
+                populateCurrencyDropdown(toCurrencySelect, currencies);
+
+                // Set default values
+                fromCurrencySelect.value = 'USD';
+                toCurrencySelect.value = 'THB';
+
+                // Initial calculation
+                await calculate();
+
+            } catch (error) {
+                resultDiv.textContent = 'เกิดข้อผิดพลาด';
+                console.error(error);
+            }
+        }
+
+        /**
+         * Helper function to populate a single currency dropdown.
+         * @param {HTMLSelectElement} selectElement The dropdown element.
+         * @param {string[]} currencies Array of currency codes.
+         */
+        function populateCurrencyDropdown(selectElement, currencies) {
+            selectElement.innerHTML = currencies.map(currency => {
+                const name = currencyNamesTH[currency] || currency;
+                // Display as "Full Name (CODE)"
+                return `<option value="${currency}">${name} (${currency})</option>`;
+            }).join('');
+        }
+
+        /**
+         * Fetches exchange rates and calculates the converted amount.
+         */
+        async function calculate() {
+            const fromCurrency = fromCurrencySelect.value;
+            const toCurrency = toCurrencySelect.value;
+            const amount = parseFloat(amountInput.value);
+
+            if (!fromCurrency || !toCurrency || isNaN(amount)) {
+                return;
+            }
+            
+            // Show loader and clear previous results
+            loader.classList.remove('hidden');
+            resultDiv.textContent = '';
+            rateInfoDiv.textContent = '';
+            lastUpdatedDiv.textContent = '';
+
+            try {
+                const response = await fetch(`${API_URL}${fromCurrency}`);
+                if (!response.ok) throw new Error('ไม่สามารถดึงข้อมูลอัตราแลกเปลี่ยนได้');
+                const data = await response.json();
+                
+                const rate = data.rates[toCurrency];
+                if (rate === undefined) throw new Error(`ไม่พบสกุลเงิน ${toCurrency}`);
+
+                const convertedAmount = (amount * rate);
+
+                // Display results
+                rateInfoDiv.textContent = `1 ${fromCurrency} = ${rate.toFixed(4)} ${toCurrency}`;
+                resultDiv.textContent = `${convertedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                
+                // Display last updated time
+                const lastUpdated = new Date(data.time_last_update_utc);
+                lastUpdatedDiv.textContent = `อัปเดตล่าสุด: ${lastUpdated.toLocaleString('th-TH')}`;
+
+            } catch (error) {
+                resultDiv.textContent = 'คำนวณล้มเหลว';
+                console.error(error);
+            } finally {
+                // Hide loader
+                loader.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Swaps the 'from' and 'to' currencies.
+         */
+        function swapCurrencies() {
+            const temp = fromCurrencySelect.value;
+            fromCurrencySelect.value = toCurrencySelect.value;
+            toCurrencySelect.value = temp;
+            calculate();
+        }
+
+        // --- Event Listeners ---
+        amountInput.addEventListener('input', calculate);
+        fromCurrencySelect.addEventListener('change', calculate);
+        toCurrencySelect.addEventListener('change', calculate);
+        swapButton.addEventListener('click', swapCurrencies);
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', loadCurrencies);
+
+    </script>
+</body>
+</html>
